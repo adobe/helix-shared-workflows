@@ -1,0 +1,25 @@
+{
+  "name": "@adobe/helix-shared-workflows",
+  "private": true,
+  "description": "Shared reusable GitHub Actions workflows for Project Helix services",
+  "scripts": {
+    "semantic-release": "semantic-release",
+    "semantic-release-dry": "semantic-release --dry-run --branches $CI_BRANCH"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adobe/helix-shared-workflows.git"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/adobe/helix-shared-workflows/issues"
+  },
+  "homepage": "https://github.com/adobe/helix-shared-workflows#readme",
+  "devDependencies": {
+    "@semantic-release/changelog": "7.0.0",
+    "@semantic-release/exec": "7.1.0",
+    "@semantic-release/git": "11.0.1",
+    "semantic-release": "25.0.9"
+  }
+}
