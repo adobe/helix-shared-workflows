@@ -2,25 +2,6 @@
 
 A reusable GitHub Actions workflow (plus its composite setup action) that builds, tests, releases and deploys Project Helix Lambda services.
 
-## Usage
-
-```yaml
-name: Build
-on: [push]
-
-permissions:
-  id-token: write
-  contents: write
-  issues: read
-  pull-requests: write
-
-jobs:
-  ci:
-    uses: adobe/helix-shared-workflows/.github/workflows/lambda.yaml@v1
-    with:
-    secrets: inherit
-```
-
 `@v1` follows the latest 1.x release; pin `@vX.Y.Z` for an exact version.
 
 ## Inputs
