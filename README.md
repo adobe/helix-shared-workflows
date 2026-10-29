@@ -1,10 +1,15 @@
 # Helix Shared Workflows
 
-A reusable GitHub Actions workflow (plus its composite setup action) that builds, tests, releases and deploys Project Helix Lambda services.
+Reusable GitHub Actions workflows for Project Helix services:
+
+- [Lambda](#lambda) (`.github/workflows/lambda.yaml`, plus its composite setup action): builds, tests, releases and deploys Project Helix Lambda services.
+- [AI Review](#ai-review) (`.github/workflows/ai-review.yml`): reviews pull requests with Claude and Codex on Amazon Bedrock.
 
 `@v1` follows the latest 1.x release; pin `@vX.Y.Z` for an exact version.
 
-## Inputs
+## Lambda
+
+### Inputs
 
 | Input | Default | Description |
 | --- | --- | --- |
@@ -21,3 +26,22 @@ A reusable GitHub Actions workflow (plus its composite setup action) that builds
 | `post-deploy-tests` | `false` | Run post-deploy integration tests in deploy mode |
 | `pre-deploy-command` | `''` | Optional shell command to run right before deploying |
 | `env-secrets` | `''` | Space-separated names of caller repo secrets to export as env vars |
+
+## AI Review
+
+`.github/workflows/ai-review.yml` is an opt-in, reusable pull request review. It runs your tests on the head and on the base, gives Claude and Codex (on Amazon Bedrock) both trees to debug in (optionally with a headed Chrome per tree and a test environment), and posts each agent's verdict as a `review / <agent>` status, a summary comment, line comments and follow-up issues.
+
+```yaml
+jobs:
+  ai-review:
+    uses: adobe/helix-shared-workflows/.github/workflows/ai-review.yml@v1
+    secrets:
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      statuses: write
+```
+
+See [docs/ai-review.md](docs/ai-review.md) for the full example, the inputs, test environments, and its [scope, security and cost](docs/ai-review.md#scope-security-and-cost).
