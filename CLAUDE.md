@@ -11,6 +11,9 @@ Shared, reusable GitHub Actions tooling for Project Helix Lambda services. Servi
   `deploy` jobs).
 - `.github/actions/lambda-setup/action.yml` — composite action used by every job in `lambda.yaml` for
   checkout/Node/`npm ci`, and (when `aws-account-id` is set) AWS login, secrets, and the pre-deploy hook.
+- `.github/workflows/ai-review.yml` — the reusable `workflow_call` AI pull request review (Claude + Codex on
+  Bedrock); documented in `docs/ai-review.md`, not in README.md's input tables. It uses no action from this
+  repo, so the release `prepareCmd` doesn't touch it.
 - `.github/workflows/main.yaml` — this repo's own CI/release workflow (not reused by callers).
 - `.releaserc.cjs` — semantic-release config; drives the release described below.
 - `CHANGELOG.md` — bot-managed by `@semantic-release/changelog`; created on first release, never hand-edited.
