@@ -341,7 +341,9 @@ jobs:
   reviewer:
     needs: [prepare, context, tests]
     if: needs.prepare.outputs.review == 'true' && needs.prepare.outputs.bedrock == 'true' && !cancelled() && needs.context.result == 'success'
-    runs-on: ${{ inputs.runs-on }}
+    # codex-action's drop-sudo fails on Ubuntu 26.04, which ubuntu-latest now is
+    # (https://github.com/openai/codex-action/issues/188): Codex stays on 24.04 until it is fixed.
+    runs-on: ${{ matrix.agent == 'codex' && inputs.runs-on == 'ubuntu-latest' && 'ubuntu-24.04' || inputs.runs-on }}
     timeout-minutes: ${{ inputs.review-timeout-minutes }}
     permissions:
       contents: read
@@ -582,14 +584,25 @@ jobs:
           safety-strategy: ${{ runner.environment == 'github-hosted' && 'drop-sudo' || 'unsafe' }}
           allow-bot-users: renovate
 
+      # The findings in a directory of the artifact's name, downloaded with merge-multiple: they
+      # land in findings/findings-<agent>/ whether one reviewer left findings or all did.
+      # (download-artifact unpacks a single match into its path itself, not a directory of its
+      # name, so one failed reviewer made the other's findings look missing too.)
+      - if: always()
+        env:
+          AGENT: ${{ matrix.agent }}
+        run: |
+          out="$RUNNER_TEMP/out/findings-$AGENT"
+          mkdir -p "$out"
+          if [ -f "$RUNNER_TEMP/review/findings.json" ]; then cp "$RUNNER_TEMP/review/findings.json" "$out/"; fi
+          if [ -d "$RUNNER_TEMP/review/shots" ]; then cp -R "$RUNNER_TEMP/review/shots" "$out/"; fi
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: findings-${{ matrix.agent }}
           overwrite: true
-          path: |
-            ${{ runner.temp }}/review/findings.json
-            ${{ runner.temp }}/review/shots/
+          path: ${{ runner.temp }}/out/
           if-no-files-found: ignore
 
   post:
@@ -607,6 +620,7 @@ jobs:
         with:
           pattern: findings-*
           path: findings
+          merge-multiple: true
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -721,6 +735,7 @@ jobs:
         with:
           pattern: findings-*
           path: findings
+          merge-multiple: true
 
       - env:
           EVENT: ${{ github.event_name }}
