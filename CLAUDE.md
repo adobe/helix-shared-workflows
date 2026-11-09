@@ -17,9 +17,7 @@ Shared, reusable GitHub Actions tooling for Project Helix Lambda services. Servi
   `prompt.mjs`) and the findings schema (`findings-schema.json`). Every job of `ai-review.yml` checks this
   directory out from `${{ job.workflow_repository }}` at `${{ job.workflow_sha }}` (the commit of the workflow
   the caller runs), exports it as `AI_REVIEW`, and calls `node "$AI_REVIEW/…"` or `bash "$AI_REVIEW/…"`.
-  Scripts get their inputs from the step's `env:`. No ref to rewrite, so `ai-review.yml` stays out of the
-  release `prepareCmd`: the release commit may not touch any workflow file, because the built-in
-  `GITHUB_TOKEN` can't push workflow changes.
+  Scripts get their inputs from the step's `env:`. No ref to rewrite (see the release model below).
 - `.github/actionlint.yaml` — ignores actionlint's unknown-property error for `job.workflow_repository` and
   `job.workflow_sha`, which actionlint 1.7.12 doesn't know yet. Drop it once actionlint does.
 - `.github/workflows/main.yaml` — this repo's own CI/release workflow (not reused by callers).
@@ -41,12 +39,13 @@ See README.md for the full input reference for `lambda.yaml` and `lambda-setup`.
   requiring a new secret or a new `package.json` script from callers, or changing job names/behavior callers
   rely on (e.g. which job deploys where).
 - `.github/workflows/lambda.yaml` references `lambda-setup` as
-  `adobe/helix-shared-workflows/.github/actions/lambda-setup@v1.0.0`. This ref is rewritten by the release
-  `prepareCmd` (a `perl` regex keyed on the exact string
-  `adobe/helix-shared-workflows/.github/actions/lambda-setup@`), which then verifies every occurrence was
-  rewritten and fails the release otherwise. Never hand-edit these refs, never change them to `./` (that
-  resolves against the *caller* repo, not this one) or to a branch name, and keep the full
-  `adobe/helix-shared-workflows/.github/actions/lambda-setup@` prefix intact so the regex keeps matching.
+  `adobe/helix-shared-workflows/.github/actions/lambda-setup@v1`, the moving major tag. Releases rewrite no
+  ref and must never change a workflow file: the release pushes with the built-in `GITHUB_TOKEN`, which may
+  not push workflow changes (`refusing to allow a GitHub App to create or update workflow`), so a
+  `prepareCmd` or a `@semantic-release/git` asset under `.github/workflows/` breaks every release. Never change
+  this ref to `./` (that resolves against the *caller* repo, not this one) or to a branch name. A caller
+  pinned to `@vX.Y.Z` still gets the latest `vX` `lambda-setup`, so a breaking change to `action.yml` is a
+  breaking change of the major version.
 - Never create or move tags by hand, never edit `CHANGELOG.md` directly, and never author
   `chore(release): ... [skip ci]` commits yourself — all of that is owned by semantic-release's
   `successCmd`/`@semantic-release/git` steps.
@@ -81,6 +80,6 @@ unless it's genuinely generic across services.
   `github.ref_name`).
 - There are no unit tests in this repo. Exercise behavioral changes to `lambda.yaml`/`action.yml` by pointing
   a real caller repo (e.g. helix-word2md) at your branch (`uses: adobe/helix-shared-workflows/.github/workflows/lambda.yaml@<branch>`).
-  Remember the `lambda-setup` action ref inside `lambda.yaml` still points at the last release unless you
-  temporarily bump it too — revert any such temporary pin before merging. `ai-review.yml` needs no such pin:
+  Remember the `lambda-setup` action ref inside `lambda.yaml` still points at `@v1` unless you temporarily
+  point it at your branch too — revert any such temporary pin before merging. `ai-review.yml` needs no such pin:
   calling it `@<branch>` runs that branch's scripts.
