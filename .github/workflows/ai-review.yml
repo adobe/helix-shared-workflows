@@ -138,7 +138,7 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@ai-review-workflow
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
 
       - id: review
         env:
@@ -173,7 +173,7 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@ai-review-workflow
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
 
       - name: The pull request, from git and the event
         env:
@@ -221,7 +221,7 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@ai-review-workflow
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
 
       - name: Browser and display
         if: inputs.browsers
@@ -277,7 +277,7 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@ai-review-workflow
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
 
       - name: Dependencies, in the head and in the base
         env:
@@ -440,7 +440,7 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@ai-review-workflow
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
 
       - env:
           GH_TOKEN: ${{ github.token }}
@@ -456,7 +456,7 @@ jobs:
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !cancelled()
     runs-on: ${{ inputs.runs-on }}
     steps:
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@ai-review-workflow
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
 
       - if: needs.prepare.outputs.review == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
