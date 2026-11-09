@@ -126,3 +126,21 @@ Most runners can write JUnit next to their usual output:
 - `node --test`: `npm test -- --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination="$REVIEW_RESULTS/junit.xml"`
 - `@web/test-runner`: add `junitReporter()` from `@web/test-runner-junit-reporter` (writes `test-results.xml`)
 - `mocha`: `mocha-multi-reporters` with `mocha-junit-reporter`
+
+## Where things are
+
+The workflow, `.github/workflows/ai-review.yml`, holds the jobs, their permissions and the third-party actions. What runs inside the steps is in [`.github/actions/ai-review/`](../.github/actions/ai-review/):
+
+| File | Job | What it does |
+| --- | --- | --- |
+| `should-review.mjs` | `prepare` | Whether this event gets a review (`pull_request` only; Renovate only with `review-renovate`) |
+| `context-event.mjs`, `context-api.mjs` | `context` | The pull request, its comments and reviews, and the repository's issues and pull requests |
+| `tests.sh` | `tests` | `setup` and `test` in the head and the base, with logs, exit codes and report files |
+| `display.sh`, `browsers.sh` | `tests`, `reviewer` | Chrome for Testing and Xvfb; in `reviewer` also one CDP browser per tree, `playwright-cli` and `curlwright` |
+| `environments.sh` | `reviewer` | The `environment` hook in each tree, and `environments.json` for the prompt |
+| `prompt.md`, `prompt.mjs` | `reviewer` | The prompt, and what fills in its placeholders |
+| `findings-schema.json` | `reviewer` | The JSON schema both agents answer with |
+| `post.mjs` | `post` | Statuses, comments and issues from the findings |
+| `verdict.sh` | `review` | The `review` check |
+
+Its `action.yml` only exports that directory as `AI_REVIEW`. Each job runs it before anything from the pull request, so the scripts come from the same release of this repository as the workflow, not from the pull request under review.
