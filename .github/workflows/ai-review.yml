@@ -1,0 +1,475 @@
+name: AI Review
+
+# Reusable pull request review by Claude and Codex on Amazon Bedrock.
+#
+# Adapted from the review jobs of ai-ecoverse/slicc-shared-web's pipeline.yml
+# (context -> reviewer -> post -> review), without the slicc browser harness:
+#
+# - `tests` runs the repository's tests on the pull request's head and on its
+#   base, and hands the logs, exit codes and report files (JUnit, coverage) to
+#   the reviewers.
+# - `reviewer` gives each agent a debuggable environment: both trees checked
+#   out with dependencies installed and the test command to re-run. With
+#   `browsers`, each tree gets a headed Chrome for Testing on a virtual display
+#   with CDP enabled, driven by ai-ecoverse/slicc-cdp's playwright-cli and
+#   curlwright. The `environment` hook lets the repository start what it needs
+#   in each tree (a dev server, fixtures) and point that tree's browser at it.
+# - `post` publishes each agent's verdict as a `review / <agent>` status, a
+#   sticky summary comment and line comments, and files follow-up issues.
+# - `review` fails unless every agent approved.
+#
+# The scripts, the prompt and the findings schema are in .github/actions/ai-review/;
+# each job runs that action first, which exports its directory as AI_REVIEW.
+#
+# See docs/ai-review.md for how to call it.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label for every job.
+        type: string
+        default: ubuntu-latest
+      node-version:
+        type: string
+        default: '24'
+      setup:
+        description: Installs dependencies; runs in the head and in the base tree.
+        type: string
+        default: npm ci
+      test:
+        description: >-
+          Runs the tests in both trees. REVIEW_RESULTS points to a directory
+          for report files. Empty skips the tests job.
+        type: string
+        default: npm test
+      test-results:
+        description: Newline-separated globs, relative to the tree, of report files to hand to the reviewers.
+        type: string
+        default: |
+          junit.xml
+          test-results.xml
+          coverage/lcov.info
+          coverage/coverage-summary.json
+          lcov.info
+      test-timeout-minutes:
+        type: number
+        default: 20
+      browsers:
+        description: >-
+          Install Chrome for Testing (slicc-cdp) and start Xvfb. In the tests
+          job CHROME_PATH points at it; for the reviewers each tree gets its own
+          headed Chrome with CDP enabled, plus playwright-cli and curlwright.
+        type: boolean
+        default: false
+      chrome:
+        description: Chrome for Testing version or milestone for slicc-cdp install-browser; empty is the current stable.
+        type: string
+        default: ''
+      environment:
+        description: >-
+          Hook that brings up a test environment, run in each tree (head, then
+          base) after setup. It gets REVIEW_SIDE (head or base), REVIEW_PORT (a
+          free port for that tree), REVIEW_CDP (that tree's browser, with
+          `browsers`) and REVIEW_ENV_DIR (for its logs). Start long-running
+          processes in the background (nohup ... &). Write the URL to open to
+          $REVIEW_ENV_DIR/url and anything the reviewers should know to
+          $REVIEW_ENV_DIR/notes.md. The default runs the package's review:env
+          script, if it has one.
+        type: string
+        default: npm run --if-present review:env
+      environment-timeout-seconds:
+        description: How long to wait for each environment's URL to answer.
+        type: number
+        default: 120
+      staging-url:
+        description: Where the pull request's head is deployed, if anywhere.
+        type: string
+        default: ''
+      base-url:
+        description: Where the base is deployed, if anywhere, to compare with.
+        type: string
+        default: ''
+      review-prompt:
+        description: Repository-specific instructions appended to the prompt.
+        type: string
+        default: ''
+      review-renovate:
+        description: Newline-separated globs of Renovate branch slugs that still get reviewed.
+        type: string
+        default: ''
+      review-timeout-minutes:
+        type: number
+        default: 60
+      review-screenshots:
+        type: number
+        default: 30
+      agents:
+        description: JSON array of reviewers, out of claude and codex.
+        type: string
+        default: '["claude","codex"]'
+      claude-model:
+        type: string
+        default: ''
+      codex-model:
+        type: string
+        default: ''
+      aws-region:
+        type: string
+        default: ''
+    secrets:
+      AWS_BEARER_TOKEN_BEDROCK:
+        required: false
+      ISSUES_TOKEN:
+        description: Optional token that may open issues in other repositories of the same owner.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      review: ${{ steps.review.outputs.review }}
+      bedrock: ${{ steps.bedrock.outputs.bedrock }}
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+
+      - id: review
+        env:
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.head_ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          SENDER: ${{ github.event.sender.login }}
+          RENOVATE_GROUPS: ${{ inputs.review-renovate }}
+        run: node "$AI_REVIEW/should-review.mjs" | tee -a "$GITHUB_OUTPUT"
+
+      - id: bedrock
+        env:
+          BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK != '' }}
+        run: echo "bedrock=$BEDROCK" >> "$GITHUB_OUTPUT"
+
+  context:
+    needs: prepare
+    if: needs.prepare.outputs.review == 'true'
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+
+      - name: The pull request, from git and the event
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/context"
+          git diff "$BASE...$HEAD" > "$RUNNER_TEMP/context/pr.diff"
+          git diff --name-status "$BASE...$HEAD" > "$RUNNER_TEMP/context/files.txt"
+          git log --format='%H%x09%an%x09%s' "$BASE..$HEAD" > "$RUNNER_TEMP/context/commits.txt"
+          node "$AI_REVIEW/context-event.mjs"
+
+      - name: Comments, reviews, issues and pull requests, as far as the API allows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: node "$AI_REVIEW/context-api.mjs"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: context
+          overwrite: true
+          path: ${{ runner.temp }}/context/
+
+  tests:
+    needs: prepare
+    if: needs.prepare.outputs.review == 'true' && inputs.test != ''
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.review-timeout-minutes }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+
+      - name: Browser and display
+        if: inputs.browsers
+        env:
+          CHROME: ${{ inputs.chrome }}
+          # renovate: datasource=npm depName=@ai-ecoverse/slicc-cdp
+          SLICC_CDP: 1.42.3
+        run: bash "$AI_REVIEW/display.sh"
+
+      - name: Tests on the head and on the base
+        env:
+          SETUP: ${{ inputs.setup }}
+          TEST: ${{ inputs.test }}
+          RESULTS: ${{ inputs.test-results }}
+          MINUTES: ${{ inputs.test-timeout-minutes }}
+        run: bash "$AI_REVIEW/tests.sh"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: tests
+          overwrite: true
+          path: ${{ runner.temp }}/tests/
+
+  reviewer:
+    needs: [prepare, context, tests]
+    if: needs.prepare.outputs.review == 'true' && needs.prepare.outputs.bedrock == 'true' && !cancelled() && needs.context.result == 'success'
+    # codex-action's drop-sudo fails on Ubuntu 26.04, which ubuntu-latest now is
+    # (https://github.com/openai/codex-action/issues/188): Codex stays on 24.04 until it is fixed.
+    runs-on: ${{ matrix.agent == 'codex' && inputs.runs-on == 'ubuntu-latest' && 'ubuntu-24.04' || inputs.runs-on }}
+    timeout-minutes: ${{ inputs.review-timeout-minutes }}
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(inputs.agents) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+
+      - name: Dependencies, in the head and in the base
+        env:
+          SETUP: ${{ inputs.setup }}
+        run: |
+          mv base "$RUNNER_TEMP/base"
+          bash -eo pipefail -c "$SETUP"
+          (cd "$RUNNER_TEMP/base" && bash -eo pipefail -c "$SETUP") || echo "::warning title=Base::setup failed in the base tree; it stays as checked out"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: context
+          path: ${{ runner.temp }}/review/context
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: needs.tests.result == 'success'
+        continue-on-error: true
+        with:
+          name: tests
+          path: ${{ runner.temp }}/review/tests
+
+      - name: Browser and display
+        if: inputs.browsers
+        env:
+          CHROME: ${{ inputs.chrome }}
+          # renovate: datasource=npm depName=@ai-ecoverse/slicc-cdp
+          SLICC_CDP: 1.42.3
+        run: bash "$AI_REVIEW/display.sh"
+
+      # a step of its own: it needs the CHROME_PATH and DISPLAY that display.sh exported
+      - name: Browsers, playwright-cli and curlwright
+        if: inputs.browsers
+        env:
+          # renovate: datasource=npm depName=@ai-ecoverse/slicc-cdp
+          SLICC_CDP: 1.42.3
+        run: bash "$AI_REVIEW/browsers.sh"
+
+      - name: Test environments
+        if: inputs.environment != ''
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          BROWSERS: ${{ inputs.browsers && 'yes' || '' }}
+          WAIT: ${{ inputs.environment-timeout-seconds }}
+        run: bash "$AI_REVIEW/environments.sh"
+
+      - name: Prompt
+        env:
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SETUP: ${{ inputs.setup }}
+          TEST: ${{ inputs.test }}
+          TESTS: ${{ needs.tests.result }}
+          BROWSERS: ${{ inputs.browsers && 'yes' || '' }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          STAGING_URL: ${{ inputs.staging-url }}
+          BASE_URL: ${{ inputs.base-url }}
+          EXTRA: ${{ inputs.review-prompt }}
+          SHOTS: ${{ inputs.review-screenshots }}
+        run: node "$AI_REVIEW/prompt.mjs"
+
+      - id: schema
+        if: matrix.agent == 'claude'
+        run: echo "schema=$(jq -c . "$AI_REVIEW/findings-schema.json")" >> "$GITHUB_OUTPUT"
+
+      - id: claude-code
+        if: matrix.agent == 'claude'
+        env:
+          # renovate: datasource=npm depName=@anthropic-ai/claude-code
+          CLAUDE_CODE: 2.1.303
+        run: |
+          npm install --prefix "$RUNNER_TEMP/claude-code" --no-save --no-audit --no-fund "@anthropic-ai/claude-code@$CLAUDE_CODE"
+          "$RUNNER_TEMP/claude-code/node_modules/.bin/claude" --version
+          echo "path=$RUNNER_TEMP/claude-code/node_modules/.bin/claude" >> "$GITHUB_OUTPUT"
+
+      - id: claude
+        if: matrix.agent == 'claude'
+        uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6
+        env:
+          AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+          AWS_REGION: ${{ inputs.aws-region || vars.AI_REVIEW_AWS_REGION || 'us-west-2' }}
+        with:
+          prompt: Follow the instructions in ${{ runner.temp }}/review/prompt.txt.
+          use_bedrock: 'true'
+          path_to_claude_code_executable: ${{ steps.claude-code.outputs.path }}
+          github_token: ${{ github.token }}
+          allowed_bots: renovate[bot]
+          claude_args: >-
+            --model ${{ inputs.claude-model || vars.AI_REVIEW_CLAUDE_MODEL || 'global.anthropic.claude-opus-5-5' }}
+            --add-dir ${{ runner.temp }}/base
+            --add-dir ${{ runner.temp }}/review
+            --allowedTools Bash,Read,Glob,Grep,WebFetch
+            --json-schema '${{ steps.schema.outputs.schema }}'
+
+      - if: matrix.agent == 'claude'
+        env:
+          FINDINGS: ${{ steps.claude.outputs.structured_output }}
+        run: printf '%s' "$FINDINGS" > "$RUNNER_TEMP/review/findings.json"
+
+      - if: matrix.agent == 'codex'
+        name: Codex on Bedrock
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex-home"
+          echo 'model_provider = "amazon-bedrock-runtime"' > "$RUNNER_TEMP/codex-home/config.toml"
+          echo '{"port":0}' > "$RUNNER_TEMP/codex-home/$GITHUB_RUN_ID.json"
+
+      - if: matrix.agent == 'codex'
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675
+        env:
+          AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+          AWS_REGION: ${{ inputs.aws-region || vars.AI_REVIEW_AWS_REGION || 'us-west-2' }}
+        with:
+          prompt-file: ${{ runner.temp }}/review/prompt.txt
+          output-file: ${{ runner.temp }}/review/findings.json
+          output-schema-file: ${{ env.AI_REVIEW }}/findings-schema.json
+          codex-home: ${{ runner.temp }}/codex-home
+          model: ${{ inputs.codex-model || vars.AI_REVIEW_CODEX_MODEL || 'global.openai.gpt-6.1-sol' }}
+          sandbox: danger-full-access
+          safety-strategy: ${{ runner.environment == 'github-hosted' && 'drop-sudo' || 'unsafe' }}
+          allow-bot-users: renovate
+
+      # The findings in a directory of the artifact's name, downloaded with merge-multiple: they
+      # land in findings/findings-<agent>/ whether one reviewer left findings or all did.
+      # (download-artifact unpacks a single match into its path itself, not a directory of its
+      # name, so one failed reviewer made the other's findings look missing too.)
+      - if: always()
+        env:
+          AGENT: ${{ matrix.agent }}
+        run: |
+          out="$RUNNER_TEMP/out/findings-$AGENT"
+          mkdir -p "$out"
+          if [ -f "$RUNNER_TEMP/review/findings.json" ]; then cp "$RUNNER_TEMP/review/findings.json" "$out/"; fi
+          if [ -d "$RUNNER_TEMP/review/shots" ]; then cp -R "$RUNNER_TEMP/review/shots" "$out/"; fi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: findings-${{ matrix.agent }}
+          overwrite: true
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: ignore
+
+  post:
+    needs: reviewer
+    if: '!cancelled() && needs.reviewer.result != ''skipped'''
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        continue-on-error: true
+        with:
+          pattern: findings-*
+          path: findings
+          merge-multiple: true
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUES_TOKEN: ${{ secrets.ISSUES_TOKEN }}
+          AGENTS: ${{ inputs.agents }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node "$AI_REVIEW/post.mjs"
+
+  review:
+    needs: [prepare, reviewer]
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !cancelled()
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+
+      - if: needs.prepare.outputs.review == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        continue-on-error: true
+        with:
+          pattern: findings-*
+          path: findings
+          merge-multiple: true
+
+      - env:
+          EVENT: ${{ github.event_name }}
+          REVIEW: ${{ needs.prepare.outputs.review }}
+          BEDROCK: ${{ needs.prepare.outputs.bedrock }}
+          FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          AGENTS: ${{ inputs.agents }}
+        run: bash "$AI_REVIEW/verdict.sh"

@@ -11,6 +11,12 @@ Shared, reusable GitHub Actions tooling for Project Helix Lambda services. Servi
   `deploy` jobs).
 - `.github/actions/lambda-setup/action.yml` — composite action used by every job in `lambda.yaml` for
   checkout/Node/`npm ci`, and (when `aws-account-id` is set) AWS login, secrets, and the pre-deploy hook.
+- `.github/workflows/ai-review.yml` — the reusable `workflow_call` AI pull request review (Claude + Codex on
+  Bedrock); documented in `docs/ai-review.md`, not in README.md's input tables.
+- `.github/actions/ai-review/` — the review's scripts (`*.mjs`, `*.sh`), its prompt (`prompt.md`, rendered by
+  `prompt.mjs`) and the findings schema (`findings-schema.json`). Its `action.yml` only exports the directory
+  as `AI_REVIEW`; every job of `ai-review.yml` runs it first and then calls `node "$AI_REVIEW/…"` or
+  `bash "$AI_REVIEW/…"`. Scripts get their inputs from the step's `env:`, like inline `run:` steps did.
 - `.github/workflows/main.yaml` — this repo's own CI/release workflow (not reused by callers).
 - `.releaserc.cjs` — semantic-release config; drives the release described below.
 - `CHANGELOG.md` — bot-managed by `@semantic-release/changelog`; created on first release, never hand-edited.
@@ -30,12 +36,14 @@ See README.md for the full input reference for `lambda.yaml` and `lambda-setup`.
   requiring a new secret or a new `package.json` script from callers, or changing job names/behavior callers
   rely on (e.g. which job deploys where).
 - `.github/workflows/lambda.yaml` references `lambda-setup` as
-  `adobe/helix-shared-workflows/.github/actions/lambda-setup@v1.0.0`. This ref is rewritten by the release
-  `prepareCmd` (a `perl` regex keyed on the exact string
-  `adobe/helix-shared-workflows/.github/actions/lambda-setup@`), which then verifies every occurrence was
-  rewritten and fails the release otherwise. Never hand-edit these refs, never change them to `./` (that
-  resolves against the *caller* repo, not this one) or to a branch name, and keep the full
-  `adobe/helix-shared-workflows/.github/actions/lambda-setup@` prefix intact so the regex keeps matching.
+  `adobe/helix-shared-workflows/.github/actions/lambda-setup@v1.0.0`, and `.github/workflows/ai-review.yml`
+  references `ai-review` the same way. These refs are rewritten by the release `prepareCmd` (a `perl` regex
+  keyed on `adobe/helix-shared-workflows/.github/actions/<name>@`, over both files), which then verifies
+  every occurrence in each file was rewritten and fails the release otherwise. Never hand-edit these refs,
+  never change them to `./` (that resolves against the *caller* repo, not this one) or to a branch name, and
+  keep the full `adobe/helix-shared-workflows/.github/actions/<name>@` prefix intact so the regex keeps
+  matching. A new workflow that uses an action of this repo must be added to the `prepareCmd` file list and
+  to the `@semantic-release/git` assets.
 - Never create or move tags by hand, never edit `CHANGELOG.md` directly, and never author
   `chore(release): ... [skip ci]` commits yourself — all of that is owned by semantic-release's
   `successCmd`/`@semantic-release/git` steps.
@@ -63,10 +71,12 @@ unless it's genuinely generic across services.
 
 - `actionlint` — CI runs it via the pinned `docker://rhysd/actionlint:1.7.12` image (`main.yaml`); run the
   same image locally to lint `lambda.yaml`/`action.yml` before pushing.
+- `shellcheck .github/actions/ai-review/*.sh` and `node --check` on each `.github/actions/ai-review/*.mjs` —
+  CI runs both, since actionlint only sees inline `run:` scripts.
 - `npm ci`
 - `npm run semantic-release-dry` — needs `GITHUB_TOKEN` and `CI_BRANCH` set (CI exports `CI_BRANCH` from
   `github.ref_name`).
 - There are no unit tests in this repo. Exercise behavioral changes to `lambda.yaml`/`action.yml` by pointing
   a real caller repo (e.g. helix-word2md) at your branch (`uses: adobe/helix-shared-workflows/.github/workflows/lambda.yaml@<branch>`).
-  Remember the `lambda-setup` action ref inside `lambda.yaml` still points at the last release unless you
-  temporarily bump it too — revert any such temporary pin before merging.
+  Remember the `lambda-setup` and `ai-review` action refs inside the workflows still point at the last
+  release unless you temporarily point them at your branch too — revert any such temporary pin before merging.
