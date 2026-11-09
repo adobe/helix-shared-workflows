@@ -18,8 +18,9 @@ name: AI Review
 #   sticky summary comment and line comments, and files follow-up issues.
 # - `review` fails unless every agent approved.
 #
-# The scripts, the prompt and the findings schema are in .github/actions/ai-review/;
-# each job runs that action first, which exports its directory as AI_REVIEW.
+# The scripts, the prompt and the findings schema are in .github/ai-review/. Each job
+# checks them out from job.workflow_sha, the commit of this workflow the caller runs,
+# and exports their directory as AI_REVIEW.
 #
 # See docs/ai-review.md for how to call it.
 
@@ -138,7 +139,18 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+      # the scripts from the commit this workflow runs from: not the caller's, not the pull request's
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ai-review
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+      - run: |
+          mv .ai-review/.github/ai-review "$RUNNER_TEMP/ai-review"
+          rm -rf .ai-review
+          echo "AI_REVIEW=$RUNNER_TEMP/ai-review" >> "$GITHUB_ENV"
 
       - id: review
         env:
@@ -173,7 +185,18 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+      # the scripts from the commit this workflow runs from: not the caller's, not the pull request's
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ai-review
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+      - run: |
+          mv .ai-review/.github/ai-review "$RUNNER_TEMP/ai-review"
+          rm -rf .ai-review
+          echo "AI_REVIEW=$RUNNER_TEMP/ai-review" >> "$GITHUB_ENV"
 
       - name: The pull request, from git and the event
         env:
@@ -221,7 +244,18 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+      # the scripts from the commit this workflow runs from: not the caller's, not the pull request's
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ai-review
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+      - run: |
+          mv .ai-review/.github/ai-review "$RUNNER_TEMP/ai-review"
+          rm -rf .ai-review
+          echo "AI_REVIEW=$RUNNER_TEMP/ai-review" >> "$GITHUB_ENV"
 
       - name: Browser and display
         if: inputs.browsers
@@ -277,7 +311,18 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+      # the scripts from the commit this workflow runs from: not the caller's, not the pull request's
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ai-review
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+      - run: |
+          mv .ai-review/.github/ai-review "$RUNNER_TEMP/ai-review"
+          rm -rf .ai-review
+          echo "AI_REVIEW=$RUNNER_TEMP/ai-review" >> "$GITHUB_ENV"
 
       - name: Dependencies, in the head and in the base
         env:
@@ -440,7 +485,18 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+      # the scripts from the commit this workflow runs from: not the caller's, not the pull request's
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ai-review
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+      - run: |
+          mv .ai-review/.github/ai-review "$RUNNER_TEMP/ai-review"
+          rm -rf .ai-review
+          echo "AI_REVIEW=$RUNNER_TEMP/ai-review" >> "$GITHUB_ENV"
 
       - env:
           GH_TOKEN: ${{ github.token }}
@@ -456,7 +512,18 @@ jobs:
     if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !cancelled()
     runs-on: ${{ inputs.runs-on }}
     steps:
-      - uses: adobe/helix-shared-workflows/.github/actions/ai-review@v1.0.0
+      # the scripts from the commit this workflow runs from: not the caller's, not the pull request's
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ai-review
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+      - run: |
+          mv .ai-review/.github/ai-review "$RUNNER_TEMP/ai-review"
+          rm -rf .ai-review
+          echo "AI_REVIEW=$RUNNER_TEMP/ai-review" >> "$GITHUB_ENV"
 
       - if: needs.prepare.outputs.review == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333

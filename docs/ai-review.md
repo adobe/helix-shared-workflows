@@ -129,7 +129,7 @@ Most runners can write JUnit next to their usual output:
 
 ## Where things are
 
-The workflow, `.github/workflows/ai-review.yml`, holds the jobs, their permissions and the third-party actions. What runs inside the steps is in [`.github/actions/ai-review/`](../.github/actions/ai-review/):
+The workflow, `.github/workflows/ai-review.yml`, holds the jobs, their permissions and the third-party actions. What runs inside the steps is in [`.github/ai-review/`](../.github/ai-review/):
 
 | File | Job | What it does |
 | --- | --- | --- |
@@ -143,4 +143,4 @@ The workflow, `.github/workflows/ai-review.yml`, holds the jobs, their permissio
 | `post.mjs` | `post` | Statuses, comments and issues from the findings |
 | `verdict.sh` | `review` | The `review` check |
 
-Its `action.yml` only exports that directory as `AI_REVIEW`. Each job runs it before anything from the pull request, so the scripts come from the same release of this repository as the workflow, not from the pull request under review.
+Each job checks that directory out from `job.workflow_sha`, the commit of `ai-review.yml` the caller runs (the tag, branch or SHA after `@`), and exports it as `AI_REVIEW`. So the scripts always come from the same commit as the workflow, never from the caller or the pull request under review, and no release has to rewrite any ref.
