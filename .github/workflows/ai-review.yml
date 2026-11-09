@@ -299,15 +299,21 @@ jobs:
           name: tests
           path: ${{ runner.temp }}/review/tests
 
-      - name: Browsers, playwright-cli and curlwright
+      - name: Browser and display
         if: inputs.browsers
         env:
           CHROME: ${{ inputs.chrome }}
           # renovate: datasource=npm depName=@ai-ecoverse/slicc-cdp
           SLICC_CDP: 1.42.3
-        run: |
-          bash "$AI_REVIEW/display.sh"
-          bash "$AI_REVIEW/browsers.sh"
+        run: bash "$AI_REVIEW/display.sh"
+
+      # a step of its own: it needs the CHROME_PATH and DISPLAY that display.sh exported
+      - name: Browsers, playwright-cli and curlwright
+        if: inputs.browsers
+        env:
+          # renovate: datasource=npm depName=@ai-ecoverse/slicc-cdp
+          SLICC_CDP: 1.42.3
+        run: bash "$AI_REVIEW/browsers.sh"
 
       - name: Test environments
         if: inputs.environment != ''
