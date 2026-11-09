@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/adobe/helix-shared-workflows/compare/v1.1.0...v1.1.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* let Chrome for Testing start its sandbox on Ubuntu 23.10 and later ([#5](https://github.com/adobe/helix-shared-workflows/issues/5)) ([b849e3c](https://github.com/adobe/helix-shared-workflows/commit/b849e3c17e6128e01e5465cf69ce43fb65db969f)), closes [adobe/helix-website#1142](https://github.com/adobe/helix-website/issues/1142)
+
 # [1.1.0](https://github.com/adobe/helix-shared-workflows/compare/v1.0.0...v1.1.0) (2026-11-09)
 
 
