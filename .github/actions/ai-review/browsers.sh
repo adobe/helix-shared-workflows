@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# reviewer, in a step after display.sh (it needs CHROME_PATH and DISPLAY): installs slicc-cdp's playwright-cli and curlwright to
-# $RUNNER_TEMP/bin and starts one headed Chrome per tree with CDP enabled, the head's
-# on 9301 and the base's on 9302.
+# reviewer, in a step after display.sh (it needs CHROME_PATH and DISPLAY): installs
+# slicc-cdp's playwright-cli and curlwright to $RUNNER_TEMP/bin and starts one headed
+# Chrome per tree with CDP enabled, the head's on 9301 and the base's on 9302.
 set -eo pipefail
 : "${CHROME_PATH:?run display.sh in an earlier step}" "${DISPLAY:?run display.sh in an earlier step}"
 curl -fsSL "https://github.com/ai-ecoverse/slicc-cdp/releases/download/v$SLICC_CDP/install.sh" \
