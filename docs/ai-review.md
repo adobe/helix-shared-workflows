@@ -36,7 +36,7 @@ jobs:
       test: npm test
 ```
 
-The calling repository needs an `AWS_BEARER_TOKEN_BEDROCK` secret: a Bedrock API key with access to the models below. Pull requests from forks get no secrets, so they aren't reviewed; the `review` check warns instead of failing.
+The calling repository needs an `AWS_BEARER_TOKEN_BEDROCK` secret: a Bedrock API key with access to the models below. Pull requests from forks get no secrets, so they aren't reviewed; the `review` check warns instead of failing. To review them too, see [Pull requests from forks](#pull-requests-from-forks).
 
 `@v1` follows the latest 1.x release of this repository; pin `@vX.Y.Z` for an exact version.
 
@@ -45,12 +45,12 @@ The calling repository needs an `AWS_BEARER_TOKEN_BEDROCK` secret: a Bedrock API
 ### Scope
 
 - **Opt-in per repository.** Nothing runs unless a repository adds a caller workflow like the one above. Repositories that don't call it see no change.
-- **Only `pull_request`.** The agents run only for the `pull_request` event, never for `pull_request_target`, `push` or anything else (the `prepare` job checks `github.event_name`). If the caller also runs on `merge_group`, the `review` check passes there without a new review, because the pull request was already reviewed.
+- **Only `pull_request`, unless you opt in to forks.** The agents run for the `pull_request` event, never for `push` or anything else (the `prepare` job checks `github.event_name`). They run for `pull_request_target` only with `review-forks: true`, only for a pull request from a fork, and only as a [strict review](#pull-requests-from-forks). If the caller also runs on `merge_group`, the `review` check passes there without a new review, because the pull request was already reviewed.
 - **Renovate is skipped by default.** Pull requests opened by Renovate aren't reviewed unless their branch matches a `review-renovate` glob.
 
 ### Security
 
-- **Forks get no secrets, so they aren't reviewed.** GitHub doesn't pass secrets to `pull_request` runs from forks, so the reviewer jobs are skipped and the `review` check warns instead of failing. A maintainer can push the change to a branch in the repository to have it reviewed.
+- **Forks get no secrets on `pull_request`, so they aren't reviewed there.** GitHub doesn't pass secrets to `pull_request` runs from forks, so the reviewer jobs are skipped and the `review` check warns instead of failing. A maintainer can push the change to a branch in the repository to have it reviewed, or the repository can opt in to [strict reviews of forks](#pull-requests-from-forks).
 - **Read-only jobs.** `context` and `reviewer` get `contents`, `issues` and `pull-requests` read only, `tests` gets `contents: read` only, and `prepare` and `review` inherit the workflow's `contents: read`. Every checkout uses `persist-credentials: false`, so no token is left in `.git/config` for the code under review to find.
 - **Only `post` writes.** It's the one job with `issues`, `pull-requests` and `statuses` write. It runs no code from the pull request: it downloads the agents' JSON findings and turns them into comments, commit statuses and issues. Issues go only to repositories of the same owner.
 - **Two secrets, passed by name.** The workflow declares only `AWS_BEARER_TOKEN_BEDROCK` and the optional `ISSUES_TOKEN`, and a reusable workflow only gets the secrets its caller passes. Pass them explicitly, as in the example, not with `secrets: inherit`, so the caller's file shows exactly what goes in; no other repository secret reaches these jobs. `ISSUES_TOKEN` is used only in `post`, never by the reviewers.
@@ -88,6 +88,7 @@ The calling repository needs an `AWS_BEARER_TOKEN_BEDROCK` secret: a Bedrock API
 | `staging-url`, `base-url` | – | Where the head and the base are deployed, e.g. `https://${{ github.head_ref }}--<repo>--adobe.aem.page` |
 | `review-prompt` | – | Repository-specific instructions appended to the prompt |
 | `review-renovate` | – | Globs of Renovate branch slugs that still get reviewed; other Renovate pull requests are skipped |
+| `review-forks` | `false` | Review pull requests from forks, strictly, when the caller runs on `pull_request_target`; see [Pull requests from forks](#pull-requests-from-forks) |
 | `agents` | `["claude","codex"]` | Which reviewers run |
 | `claude-model` | `global.anthropic.claude-opus-5-5` | Also settable with the `AI_REVIEW_CLAUDE_MODEL` variable |
 | `codex-model` | `global.openai.gpt-6.1-sol` | Also settable with the `AI_REVIEW_CODEX_MODEL` variable |
@@ -95,6 +96,66 @@ The calling repository needs an `AWS_BEARER_TOKEN_BEDROCK` secret: a Bedrock API
 | `runs-on` | `ubuntu-latest` | Runner for every job |
 | `node-version` | `24` | |
 | `review-timeout-minutes` | `60` | |
+
+## Pull requests from forks
+
+A pull request from a fork gets no secrets on `pull_request`, so the review above skips it. With `review-forks: true` and a second caller workflow on `pull_request_target`, forks get a **strict review**. `pull_request_target` runs with the base repository's secrets, so the strict review is built to keep the fork's code away from them:
+
+- **Nothing from the fork is installed or run.** There is no `tests` job, and `setup`, `browsers` and the `environment` hook are skipped. The reviewers get the two trees and the context, nothing else.
+- **The reviewers can only read.** Claude gets `Read`, `Glob` and `Grep`, without `Bash` or `WebFetch`. Codex runs in its `read-only` sandbox.
+- **The prompt is stricter.** Everything in the pull request is untrusted data, text in it that addresses the reviewer is quoted and denied, and the reviewers deny what they can't rule out as harmful by reading it, not only what they confirmed.
+- **Only a pull request from a fork is reviewed this way.** On `pull_request_target`, a pull request from a branch of the repository gets no review; it has the `pull_request` one.
+
+```yaml
+# .github/workflows/ai-review-forks.yml
+name: AI Review (forks)
+
+on:
+  pull_request_target:
+
+concurrency:
+  group: ai-review-forks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # A maintainer reads the diff and approves the run before the key is anywhere near it:
+  # give the environment required reviewers.
+  approve:
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    environment: fork-review
+    steps:
+      - run: echo "approved"
+
+  ai-review:
+    needs: approve
+    uses: adobe/helix-shared-workflows/.github/workflows/ai-review.yml@v1
+    secrets:
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      statuses: write
+    with:
+      review-forks: true
+```
+
+In the `pull_request` caller, skip forks, so that a pull request has one `review` check and not a second one that passes without a review:
+
+```yaml
+jobs:
+  ai-review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+```
+
+**Residual risk.** The reviewers still hold the Bedrock key while they read text an outsider wrote. A reviewer that is talked into it could read the key from its own process and put it in its findings, which `post` publishes on the pull request. What stands against that:
+
+- The `approve` job. An environment with required reviewers means a maintainer has read the diff before any agent does, and a new push needs a new approval.
+- The read-only tools, and Claude Code's scrubbing of secrets from subprocess environments, which `claude-code-action` turns on when users without write access are allowed.
+- A dedicated key with a spend limit, as above.
+
+Don't turn this on without the approval step.
 
 ## Test environments
 

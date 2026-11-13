@@ -18,5 +18,5 @@ Answer with JSON that matches the schema you were given:
   security is true for anything about a security or secret exposure, a guard bypass, or protected data reaching where it shouldn't, and false for everything else.
   Put a security finding in the summary or a line comment of this review, never as an issue: an issue with security true is never filed.
 Screenshots: when a finding is about what a page shows, save a PNG to {{T}}/review/shots/ (a name of letters, digits, dots, dashes or underscores; at most {{SHOTS}} files) and mention it in the summary, a comment or an issue body as ![what it shows](shots/name.png). They're attached to the run's findings artifact.
-
+{{STRICT}}
 {{EXTRA}}
