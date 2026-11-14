@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/adobe/helix-shared-workflows/compare/v1.3.0...v1.3.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* let a strict review check out the fork's commit ([c318f3a](https://github.com/adobe/helix-shared-workflows/commit/c318f3ab839eb8faf446695256fcf0b071e7308f))
+
 # [1.3.0](https://github.com/adobe/helix-shared-workflows/compare/v1.2.1...v1.3.0) (2026-11-14)
 
 
