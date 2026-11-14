@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const {
   RUNNER_TEMP: T, REPO, PR, SETUP, TEST, TESTS, BROWSERS, ENVIRONMENT, STAGING_URL, BASE_URL, EXTRA, SHOTS, DISPLAY,
+  BASELINE, BASELINE_QUESTIONS,
 } = process.env;
 // a strict review (a pull request from a fork): nothing was installed or run, and nothing may be
 const STRICT = process.env.STRICT === 'true';
@@ -32,6 +33,9 @@ if (read(`${T}/review/environments.json`)?.toString().includes('"url":"http')) {
       more.push(`Notes from the ${side} environment's hook: ${read(notes).subarray(0, 4000).toString().replace(/\n+$/, '')}`);
     }
   }
+}
+if (BASELINE && !STRICT) {
+  more.push(`ask-baseline "<question>" asks a baseline model: a small model with no tools, no files and no web access, which knows nothing about this repository or this pull request. Every call is a new conversation, so a question has to stand alone, and it answers up to ${BASELINE_QUESTIONS || 30} questions in this review. Use it when the change is to instructions written for an agent (a skill, a prompt, an AGENTS.md): ask it the task or the fact the way someone would who has not read the instructions, without giving the answer away. What the baseline gets right by itself, a more capable agent knows too, and the instructions don't need to say it. What it gets wrong or doesn't know is what the instructions are for. Its questions and answers are kept in ${T}/review/baseline/questions.jsonl.`);
 }
 if (STAGING_URL) more.push(`The head of the pull request is deployed at ${STAGING_URL}.`);
 if (BASE_URL) more.push(`The base is deployed at ${BASE_URL}, to compare with.`);

@@ -89,6 +89,10 @@ The calling repository needs an `AWS_BEARER_TOKEN_BEDROCK` secret: a Bedrock API
 | `review-prompt` | – | Repository-specific instructions appended to the prompt |
 | `review-renovate` | – | Globs of Renovate branch slugs that still get reviewed; other Renovate pull requests are skipped |
 | `review-forks` | `false` | Review pull requests from forks, strictly, when the caller runs on `pull_request_target`; see [Pull requests from forks](#pull-requests-from-forks) |
+| `baseline` | `false` | Gives each reviewer a small model without tools to ask; see [Baseline model](#baseline-model) |
+| `baseline-claude-model` | `global.anthropic.claude-haiku-5-5` | The baseline of the Claude reviewer. Also settable with the `AI_REVIEW_BASELINE_CLAUDE_MODEL` variable |
+| `baseline-codex-model` | `global.openai.gpt-5.6-luna` | The baseline of the Codex reviewer. Also settable with the `AI_REVIEW_BASELINE_CODEX_MODEL` variable |
+| `baseline-questions` | `30` | How many questions the baseline answers for each reviewer |
 | `agents` | `["claude","codex"]` | Which reviewers run |
 | `claude-model` | `global.anthropic.claude-opus-5-5` | Also settable with the `AI_REVIEW_CLAUDE_MODEL` variable |
 | `codex-model` | `global.openai.gpt-6.1-sol` | Also settable with the `AI_REVIEW_CODEX_MODEL` variable |
@@ -157,6 +161,23 @@ jobs:
 - A dedicated key with a spend limit, as above.
 
 Don't turn this on without the approval step.
+
+## Baseline model
+
+Some repositories hold instructions written for agents: skills, prompts, an `AGENTS.md`. A line in them is worth its place only if an agent would get the thing wrong without it. With `baseline: true`, each reviewer can find that out by asking a model that hasn't read the instructions:
+
+```
+$ ask-baseline "How do I keep a GitHub Actions workflow on one Node version?"
+Use actions/setup-node with a node-version input, …
+```
+
+- **What answers.** A small model on Bedrock: Haiku for the Claude reviewer, Luna for the Codex reviewer. It gets the question and a two-sentence system prompt, and nothing else: no tools, no files, no web access, nothing about the repository or the pull request. Every call is a new conversation.
+- **What the reviewer does with it.** That is for the caller's `review-prompt` to say. The built-in prompt only explains the command: ask the task or the fact as someone would who has not read the instructions, and treat what the baseline gets right by itself as something the instructions don't need to say.
+- **Where it runs.** A server on `127.0.0.1` in the reviewer's job holds the Bedrock key and makes the calls; `ask-baseline` only talks to that server. Anything on the runner can ask it, so it answers at most `baseline-questions` questions of at most 4,000 characters, with answers of at most 1,000 tokens.
+- **What is kept.** The questions and answers are in the reviewer's findings artifact, as `baseline.jsonl`.
+- **Not in a strict review.** There the reviewers run no commands.
+
+The cost is small next to the review itself: thirty short calls to the smallest model of each provider.
 
 ## Test environments
 
