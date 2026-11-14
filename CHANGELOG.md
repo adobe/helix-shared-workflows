@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/adobe/helix-shared-workflows/compare/v1.2.0...v1.2.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* start a strict review in the base tree, so a fork's agent configuration is not loaded ([496fa7b](https://github.com/adobe/helix-shared-workflows/commit/496fa7b2692d60b8011f128549409474c60b81b2))
+
 # [1.2.0](https://github.com/adobe/helix-shared-workflows/compare/v1.1.1...v1.2.0) (2026-11-14)
 
 
