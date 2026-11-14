@@ -205,11 +205,17 @@ jobs:
       issues: read
       pull-requests: read
     steps:
+      # In a strict review this is a fork's commit on pull_request_target, which
+      # actions/checkout refuses unless told otherwise. This job only reads it: git
+      # computes the diff, the scripts come from this workflow's own commit, nothing of
+      # the pull request is run, and the job has no secrets and a read-only token that
+      # is not left in the checkout.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+          allow-unsafe-pr-checkout: ${{ needs.prepare.outputs.strict == 'true' }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -336,11 +342,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # In a strict review this is the fork's head, next to the base: files for the
+      # reviewers to read, never the working directory and never run. actions/checkout
+      # refuses a fork's commit on pull_request_target unless told otherwise.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ needs.prepare.outputs.strict == 'true' && github.event.pull_request.head.sha || github.event.pull_request.base.sha }}
           path: ${{ needs.prepare.outputs.strict == 'true' && 'head' || 'base' }}
           persist-credentials: false
+          allow-unsafe-pr-checkout: ${{ needs.prepare.outputs.strict == 'true' }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
