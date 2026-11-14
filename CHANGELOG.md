@@ -1,3 +1,15 @@
+# [1.3.0](https://github.com/adobe/helix-shared-workflows/compare/v1.2.1...v1.3.0) (2026-11-14)
+
+
+### Bug Fixes
+
+* give the baseline room to reason, and say why an answer has no text ([5751129](https://github.com/adobe/helix-shared-workflows/commit/5751129511874357a7c09dc917807f614f3f71a2)), closes [adobe/skills#621](https://github.com/adobe/skills/issues/621)
+
+
+### Features
+
+* give each reviewer a baseline model to ask ([25ead25](https://github.com/adobe/helix-shared-workflows/commit/25ead252d304ea7cbe63517cd6a60823f06bc9ce))
+
 ## [1.2.1](https://github.com/adobe/helix-shared-workflows/compare/v1.2.0...v1.2.1) (2026-11-14)
 
 
