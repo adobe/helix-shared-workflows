@@ -101,6 +101,15 @@ test('an error from Bedrock is reported, logged and counts as a question', async
   assert.match(JSON.parse(readFileSync(log, 'utf8').trim()).error, /429/);
 });
 
+test('an answer without text says why, so that it is not taken for "the model does not know"', async (t) => {
+  const fetchImpl = async () => new Response(JSON.stringify({ output: { message: { content: [{ reasoningContent: {} }] } }, stopReason: 'max_tokens', usage: { outputTokens: 4000 } }), { status: 200 });
+  const { post, log } = await baseline(t, { endpoint: 'http://unused', fetchImpl });
+  const response = await post('a hard question');
+  assert.equal(response.status, 502);
+  assert.match(await response.text(), /without text \(stop reason: max_tokens, output tokens: 4000\)/);
+  assert.match(JSON.parse(readFileSync(log, 'utf8').trim()).error, /max_tokens/);
+});
+
 test('only POST /ask and GET /health are served', async (t) => {
   const { endpoint } = await bedrock(t);
   const { port } = await baseline(t, { endpoint });

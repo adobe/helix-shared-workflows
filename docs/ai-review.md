@@ -173,7 +173,7 @@ Use actions/setup-node with a node-version input, …
 
 - **What answers.** A small model on Bedrock: Haiku for the Claude reviewer, Luna for the Codex reviewer. It gets the question and a two-sentence system prompt, and nothing else: no tools, no files, no web access, nothing about the repository or the pull request. Every call is a new conversation.
 - **What the reviewer does with it.** That is for the caller's `review-prompt` to say. The built-in prompt only explains the command: ask the task or the fact as someone would who has not read the instructions, and treat what the baseline gets right by itself as something the instructions don't need to say.
-- **Where it runs.** A server on `127.0.0.1` in the reviewer's job holds the Bedrock key and makes the calls; `ask-baseline` only talks to that server. Anything on the runner can ask it, so it answers at most `baseline-questions` questions of at most 4,000 characters, with answers of at most 1,000 tokens.
+- **Where it runs.** A server on `127.0.0.1` in the reviewer's job holds the Bedrock key and makes the calls; `ask-baseline` only talks to that server. Anything on the runner can ask it, so it answers at most `baseline-questions` questions of at most 4,000 characters, with at most 4,000 output tokens each, reasoning included.
 - **What is kept.** The questions and answers are in the reviewer's findings artifact, as `baseline.jsonl`.
 - **Not in a strict review.** There the reviewers run no commands.
 

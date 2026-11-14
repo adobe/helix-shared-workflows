@@ -18,7 +18,8 @@ import { realpathSync } from 'node:fs';
 
 export const SYSTEM = 'Answer from what you know. You have no tools, no files and no web access, and you can\'t ask back. Say what you would do or what you believe is true, briefly and concretely. If you don\'t know, say so.';
 const MAX_QUESTION = 4000;
-const MAX_TOKENS = 1000;
+// Room for a small model that reasons before it answers: the limit covers both.
+const MAX_TOKENS = 4000;
 
 // The Converse request for one question. It has no toolConfig: the model can only answer.
 export function converseBody(question) {
@@ -42,8 +43,11 @@ export async function ask(question, { endpoint, model, apiKey, fetchImpl = fetch
     signal: AbortSignal.timeout(120000),
   });
   if (!response.ok) throw new Error(`Bedrock answered ${response.status}: ${(await response.text()).slice(0, 300)}`);
-  const text = answerText(await response.json());
-  if (!text) throw new Error('Bedrock answered without text');
+  const data = await response.json();
+  const text = answerText(data);
+  if (!text) {
+    throw new Error(`the model answered without text (stop reason: ${data.stopReason ?? 'unknown'}, output tokens: ${data.usage?.outputTokens ?? 'unknown'})`);
+  }
   return text;
 }
 
