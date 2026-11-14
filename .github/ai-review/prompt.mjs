@@ -44,10 +44,21 @@ Check what the description claims against the diff, and don't take its word for 
 Deny for a confirmed problem as above, and also for what you can't rule out as harmful by reading it: a new or changed script, hook, workflow, dependency, install step, network endpoint or permission whose effect you can't establish, a change to what a guard or a confirmation does, or a change outside what the description says the pull request is for. Say what would let you approve.
 Never put a credential, a token or the content of an environment variable in your answer.
 `;
+// Where the two trees are. A strict review starts the agents in the base, so that the
+// project configuration they load is the repository's and not the fork's.
+const trees = STRICT
+  ? [
+    `- ${T}/head: the pull request's head, as the fork pushed it. Nothing in it was installed or run. Its diff against the base is ${T}/review/context/pr.diff.`,
+    '- .: its base, to compare with. This is the working directory.',
+  ]
+  : [
+    `- .: the pull request's head, set up with "${SETUP}", with full history, so git diff BASE...HEAD and git log work (BASE is the base commit: git merge-base HEAD origin/BASE_REF, or the diff in ${T}/review/context/pr.diff). Your scratch files go in ${T}/review, never in the checkout.`,
+    `- ${T}/base: its base, to compare with, set up the same way if that worked.`,
+  ];
 const values = {
   PR,
   REPO,
-  SETUP: STRICT ? 'nothing: it comes from a fork, see below' : SETUP,
+  TREES: trees.join('\n'),
   T,
   SHOTS,
   EXTRA,

@@ -307,16 +307,20 @@ jobs:
       matrix:
         agent: ${{ fromJSON(inputs.agents) }}
     steps:
+      # The agents start in the workspace root and load the project configuration they find
+      # there: .claude/settings.json with its hooks, .mcp.json, AGENTS.md. So the root is the
+      # head only when the pull request comes from this repository. In a strict review the
+      # root is the base, and the fork's head sits next to it as files to read.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ needs.prepare.outputs.strict == 'true' && github.event.pull_request.base.sha || github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: base
+          ref: ${{ needs.prepare.outputs.strict == 'true' && github.event.pull_request.head.sha || github.event.pull_request.base.sha }}
+          path: ${{ needs.prepare.outputs.strict == 'true' && 'head' || 'base' }}
           persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -343,11 +347,12 @@ jobs:
           SETUP: ${{ inputs.setup }}
           STRICT: ${{ needs.prepare.outputs.strict }}
         run: |
-          mv base "$RUNNER_TEMP/base"
           if [ "$STRICT" = true ]; then
+            mv head "$RUNNER_TEMP/head"
             echo "strict review: nothing from the pull request is installed or run"
             exit 0
           fi
+          mv base "$RUNNER_TEMP/base"
           bash -eo pipefail -c "$SETUP"
           (cd "$RUNNER_TEMP/base" && bash -eo pipefail -c "$SETUP") || echo "::warning title=Base::setup failed in the base tree; it stays as checked out"
 
@@ -434,7 +439,7 @@ jobs:
           allowed_non_write_users: ${{ needs.prepare.outputs.strict == 'true' && '*' || '' }}
           claude_args: >-
             --model ${{ inputs.claude-model || vars.AI_REVIEW_CLAUDE_MODEL || 'global.anthropic.claude-opus-5-5' }}
-            --add-dir ${{ runner.temp }}/base
+            --add-dir ${{ runner.temp }}/${{ needs.prepare.outputs.strict == 'true' && 'head' || 'base' }}
             --add-dir ${{ runner.temp }}/review
             --allowedTools ${{ needs.prepare.outputs.strict == 'true' && 'Read,Glob,Grep' || 'Bash,Read,Glob,Grep,WebFetch' }}
             --json-schema '${{ steps.schema.outputs.schema }}'

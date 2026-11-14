@@ -1,8 +1,7 @@
 Review pull request {{PR}} of {{REPO}}.
 
 The working directory holds:
-- .: the pull request's head, set up with "{{SETUP}}", with full history, so git diff BASE...HEAD and git log work (BASE is the base commit: git merge-base HEAD origin/BASE_REF, or the diff in {{T}}/review/context/pr.diff). Your scratch files go in {{T}}/review, never in the checkout.
-- {{T}}/base: its base, to compare with, set up the same way if that worked.
+{{TREES}}
 - {{T}}/review/context/: the pull request (pr.json, pr.diff, files.txt, commits.txt, comments.json, reviews.json, review-comments.json), the repository's issues (issues.json) and recent pull requests (pulls.json). missing.txt names any the GitHub API wouldn't give; read those with gh if you need them.{{MORE}}
 
 Read the change, run what you need, and decide whether it should be merged.
