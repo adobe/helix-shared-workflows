@@ -99,6 +99,14 @@ on:
         description: Newline-separated globs of Renovate branch slugs that still get reviewed.
         type: string
         default: ''
+      review-forks:
+        description: >-
+          Review pull requests from forks when the caller runs on
+          pull_request_target. Such a review is strict: nothing from the fork is
+          installed or run, the reviewers can only read, and they deny what they
+          can't rule out as harmful. See docs/ai-review.md before turning it on.
+        type: boolean
+        default: false
       review-timeout-minutes:
         type: number
         default: 60
@@ -133,6 +141,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     outputs:
       review: ${{ steps.review.outputs.review }}
+      strict: ${{ steps.review.outputs.strict }}
       bedrock: ${{ steps.bedrock.outputs.bedrock }}
     steps:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -159,6 +168,8 @@ jobs:
           AUTHOR: ${{ github.event.pull_request.user.login }}
           SENDER: ${{ github.event.sender.login }}
           RENOVATE_GROUPS: ${{ inputs.review-renovate }}
+          FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          REVIEW_FORKS: ${{ inputs.review-forks }}
         run: node "$AI_REVIEW/should-review.mjs" | tee -a "$GITHUB_OUTPUT"
 
       - id: bedrock
@@ -223,7 +234,8 @@ jobs:
 
   tests:
     needs: prepare
-    if: needs.prepare.outputs.review == 'true' && inputs.test != ''
+    # a strict review runs nothing from the pull request, so it has no tests job
+    if: needs.prepare.outputs.review == 'true' && needs.prepare.outputs.strict != 'true' && inputs.test != ''
     runs-on: ${{ inputs.runs-on }}
     timeout-minutes: ${{ inputs.review-timeout-minutes }}
     permissions:
@@ -324,11 +336,18 @@ jobs:
           rm -rf .ai-review
           echo "AI_REVIEW=$RUNNER_TEMP/ai-review" >> "$GITHUB_ENV"
 
+      # A strict review installs nothing: setup would run the fork's code (lifecycle
+      # scripts, for one) in the job that later holds the Bedrock key.
       - name: Dependencies, in the head and in the base
         env:
           SETUP: ${{ inputs.setup }}
+          STRICT: ${{ needs.prepare.outputs.strict }}
         run: |
           mv base "$RUNNER_TEMP/base"
+          if [ "$STRICT" = true ]; then
+            echo "strict review: nothing from the pull request is installed or run"
+            exit 0
+          fi
           bash -eo pipefail -c "$SETUP"
           (cd "$RUNNER_TEMP/base" && bash -eo pipefail -c "$SETUP") || echo "::warning title=Base::setup failed in the base tree; it stays as checked out"
 
@@ -345,7 +364,7 @@ jobs:
           path: ${{ runner.temp }}/review/tests
 
       - name: Browser and display
-        if: inputs.browsers
+        if: inputs.browsers && needs.prepare.outputs.strict != 'true'
         env:
           CHROME: ${{ inputs.chrome }}
           # renovate: datasource=npm depName=@ai-ecoverse/slicc-cdp
@@ -354,14 +373,14 @@ jobs:
 
       # a step of its own: it needs the CHROME_PATH and DISPLAY that display.sh exported
       - name: Browsers, playwright-cli and curlwright
-        if: inputs.browsers
+        if: inputs.browsers && needs.prepare.outputs.strict != 'true'
         env:
           # renovate: datasource=npm depName=@ai-ecoverse/slicc-cdp
           SLICC_CDP: 1.42.3
         run: bash "$AI_REVIEW/browsers.sh"
 
       - name: Test environments
-        if: inputs.environment != ''
+        if: inputs.environment != '' && needs.prepare.outputs.strict != 'true'
         env:
           ENVIRONMENT: ${{ inputs.environment }}
           BROWSERS: ${{ inputs.browsers && 'yes' || '' }}
@@ -381,6 +400,7 @@ jobs:
           BASE_URL: ${{ inputs.base-url }}
           EXTRA: ${{ inputs.review-prompt }}
           SHOTS: ${{ inputs.review-screenshots }}
+          STRICT: ${{ needs.prepare.outputs.strict }}
         run: node "$AI_REVIEW/prompt.mjs"
 
       - id: schema
@@ -409,11 +429,14 @@ jobs:
           path_to_claude_code_executable: ${{ steps.claude-code.outputs.path }}
           github_token: ${{ github.token }}
           allowed_bots: renovate[bot]
+          # the author of a pull request from a fork has no write access; the caller's
+          # approval step stands in for it (see docs/ai-review.md)
+          allowed_non_write_users: ${{ needs.prepare.outputs.strict == 'true' && '*' || '' }}
           claude_args: >-
             --model ${{ inputs.claude-model || vars.AI_REVIEW_CLAUDE_MODEL || 'global.anthropic.claude-opus-5-5' }}
             --add-dir ${{ runner.temp }}/base
             --add-dir ${{ runner.temp }}/review
-            --allowedTools Bash,Read,Glob,Grep,WebFetch
+            --allowedTools ${{ needs.prepare.outputs.strict == 'true' && 'Read,Glob,Grep' || 'Bash,Read,Glob,Grep,WebFetch' }}
             --json-schema '${{ steps.schema.outputs.schema }}'
 
       - if: matrix.agent == 'claude'
@@ -439,9 +462,10 @@ jobs:
           output-schema-file: ${{ env.AI_REVIEW }}/findings-schema.json
           codex-home: ${{ runner.temp }}/codex-home
           model: ${{ inputs.codex-model || vars.AI_REVIEW_CODEX_MODEL || 'global.openai.gpt-6.1-sol' }}
-          sandbox: danger-full-access
+          sandbox: ${{ needs.prepare.outputs.strict == 'true' && 'read-only' || 'danger-full-access' }}
           safety-strategy: ${{ runner.environment == 'github-hosted' && 'drop-sudo' || 'unsafe' }}
           allow-bot-users: renovate
+          allow-users: ${{ needs.prepare.outputs.strict == 'true' && '*' || '' }}
 
       # The findings in a directory of the artifact's name, downloaded with merge-multiple: they
       # land in findings/findings-<agent>/ whether one reviewer left findings or all did.
@@ -509,7 +533,7 @@ jobs:
 
   review:
     needs: [prepare, reviewer]
-    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !cancelled()
+    if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'merge_group') && !cancelled()
     runs-on: ${{ inputs.runs-on }}
     steps:
       # the scripts from the commit this workflow runs from: not the caller's, not the pull request's
