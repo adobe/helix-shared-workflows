@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/adobe/helix-shared-workflows/compare/v1.1.1...v1.2.0) (2026-11-14)
+
+
+### Features
+
+* review pull requests from forks, strictly, when the caller opts in ([edc095e](https://github.com/adobe/helix-shared-workflows/commit/edc095ecb2de100c6b6662fa31d3c7961a62a683))
+
 ## [1.1.1](https://github.com/adobe/helix-shared-workflows/compare/v1.1.0...v1.1.1) (2026-11-09)
 
 
