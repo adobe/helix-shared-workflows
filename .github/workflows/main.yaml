@@ -25,7 +25,7 @@ jobs:
       - name: Lint the AI review scripts
         run: |
           command -v shellcheck > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck > /dev/null; }
-          shellcheck .github/ai-review/*.sh
+          shellcheck .github/ai-review/*.sh .github/release/*.sh
           for script in .github/ai-review/*.mjs; do node --check "$script"; done
           node --test .github/ai-review/*.test.mjs
           jq empty .github/ai-review/findings-schema.json
@@ -56,3 +56,14 @@ jobs:
       - run: npm run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # semantic-release tags the version first and moves the major tag and creates the
+      # GitHub release last. If it fails in between, a re-run finds the tag and releases
+      # nothing. This step does the late part for whatever is missing, so a re-run of the
+      # job completes a release that stopped half way.
+      - name: Bring the major tag and the GitHub releases in line with the version tags
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch --tags --force origin
+          bash .github/release/repair.sh

@@ -46,6 +46,11 @@ See README.md for the full input reference for `lambda.yaml` and `lambda-setup`.
   this ref to `./` (that resolves against the *caller* repo, not this one) or to a branch name. A caller
   pinned to `@vX.Y.Z` still gets the latest `vX` `lambda-setup`, so a breaking change to `action.yml` is a
   breaking change of the major version.
+- semantic-release pushes the release commit and the `vX.Y.Z` tag first; the GitHub release and the move of
+  `vX` come last. If it fails in between, a re-run finds the tag and releases nothing. So the release job ends
+  with `.github/release/repair.sh`, which runs whether semantic-release succeeded or not: it points every `vX`
+  at the latest `vX.Y.Z` and creates the GitHub release of any version tag that has none, from its section of
+  `CHANGELOG.md`. To complete a release that stopped half way, re-run the job; don't fix tags by hand.
 - Never create or move tags by hand, never edit `CHANGELOG.md` directly, and never author
   `chore(release): ... [skip ci]` commits yourself — all of that is owned by semantic-release's
   `successCmd`/`@semantic-release/git` steps.
