@@ -27,6 +27,7 @@ jobs:
           command -v shellcheck > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck > /dev/null; }
           shellcheck .github/ai-review/*.sh
           for script in .github/ai-review/*.mjs; do node --check "$script"; done
+          node --test .github/ai-review/*.test.mjs
           jq empty .github/ai-review/findings-schema.json
       - name: Semantic Release (Dry Run)
         run: npm run semantic-release-dry

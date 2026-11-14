@@ -107,6 +107,25 @@ on:
           can't rule out as harmful. See docs/ai-review.md before turning it on.
         type: boolean
         default: false
+      baseline:
+        description: >-
+          Give each reviewer a baseline model to ask, with ask-baseline "<question>": a
+          small model (Haiku for Claude, Luna for Codex) with no tools, no files and no
+          web access, which knows only the question. For reviewing instructions written
+          for agents: what the baseline gets right by itself, the instructions don't need
+          to say. Not available in a strict review.
+        type: boolean
+        default: false
+      baseline-claude-model:
+        type: string
+        default: ''
+      baseline-codex-model:
+        type: string
+        default: ''
+      baseline-questions:
+        description: How many questions the baseline answers for each reviewer.
+        type: number
+        default: 30
       review-timeout-minutes:
         type: number
         default: 60
@@ -392,6 +411,17 @@ jobs:
           WAIT: ${{ inputs.environment-timeout-seconds }}
         run: bash "$AI_REVIEW/environments.sh"
 
+      # A small model with no tools that the reviewer can ask what a model knows without
+      # being told. The Bedrock key stays in its server; ask-baseline only reaches that.
+      - name: Baseline model
+        if: inputs.baseline && needs.prepare.outputs.strict != 'true'
+        env:
+          AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+          AWS_REGION: ${{ inputs.aws-region || vars.AI_REVIEW_AWS_REGION || 'us-west-2' }}
+          BASELINE_MODEL: ${{ matrix.agent == 'codex' && (inputs.baseline-codex-model || vars.AI_REVIEW_BASELINE_CODEX_MODEL || 'global.openai.gpt-5.6-luna') || (inputs.baseline-claude-model || vars.AI_REVIEW_BASELINE_CLAUDE_MODEL || 'global.anthropic.claude-haiku-5-5') }}
+          BASELINE_MAX_QUESTIONS: ${{ inputs.baseline-questions }}
+        run: bash "$AI_REVIEW/baseline.sh"
+
       - name: Prompt
         env:
           REPO: ${{ github.repository }}
@@ -406,6 +436,8 @@ jobs:
           EXTRA: ${{ inputs.review-prompt }}
           SHOTS: ${{ inputs.review-screenshots }}
           STRICT: ${{ needs.prepare.outputs.strict }}
+          BASELINE: ${{ inputs.baseline && 'yes' || '' }}
+          BASELINE_QUESTIONS: ${{ inputs.baseline-questions }}
         run: node "$AI_REVIEW/prompt.mjs"
 
       - id: schema
@@ -484,6 +516,7 @@ jobs:
           mkdir -p "$out"
           if [ -f "$RUNNER_TEMP/review/findings.json" ]; then cp "$RUNNER_TEMP/review/findings.json" "$out/"; fi
           if [ -d "$RUNNER_TEMP/review/shots" ]; then cp -R "$RUNNER_TEMP/review/shots" "$out/"; fi
+          if [ -f "$RUNNER_TEMP/review/baseline/questions.jsonl" ]; then cp "$RUNNER_TEMP/review/baseline/questions.jsonl" "$out/baseline.jsonl"; fi
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
